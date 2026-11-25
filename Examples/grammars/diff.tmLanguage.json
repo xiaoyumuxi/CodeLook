@@ -1,0 +1,61 @@
+{
+  "name": "Diff",
+  "scopeName": "source.diff",
+  "fileTypes": ["diff", "patch", "rej"],
+  "patterns": [
+    {
+      "comment": "diff --git a/x b/x, index abc..def, new file mode …",
+      "match": "^(?:diff(?: --git| -[a-zA-Z]+)?|index|similarity index|dissimilarity index|rename (?:from|to)|copy (?:from|to)|new file mode|deleted file mode|old mode|new mode|Binary files|Only in) .*$",
+      "name": "meta.diff.header.git"
+    },
+    {
+      "match": "^(@@)\\s*(.+?)\\s*(@@)(.*)$",
+      "name": "meta.diff.range.unified",
+      "captures": {
+        "4": { "name": "meta.diff.range.section" }
+      }
+    },
+    {
+      "match": "^\\d+(?:,\\d+)*(?:a|c|d)\\d+(?:,\\d+)*$",
+      "name": "meta.diff.range.normal"
+    },
+    {
+      "match": "^\\*{15}$|^\\*\\*\\* \\d+(?:,\\d+)? \\*\\*\\*\\*$|^--- \\d+(?:,\\d+)? ----$",
+      "name": "meta.diff.range.context"
+    },
+    {
+      "match": "^((?:---|\\*\\*\\*) )(.*)$",
+      "name": "meta.diff.header.from-file",
+      "captures": {
+        "1": { "name": "punctuation.definition.from-file.diff" }
+      }
+    },
+    {
+      "match": "^(\\+\\+\\+ )(.*)$",
+      "name": "meta.diff.header.to-file",
+      "captures": {
+        "1": { "name": "punctuation.definition.to-file.diff" }
+      }
+    },
+    {
+      "match": "^[+>].*$",
+      "name": "markup.inserted.diff"
+    },
+    {
+      "match": "^[-<].*$",
+      "name": "markup.deleted.diff"
+    },
+    {
+      "match": "^!.*$",
+      "name": "markup.changed.diff"
+    },
+    {
+      "match": "^\\\\ No newline at end of file$",
+      "name": "comment.line.diff"
+    },
+    {
+      "match": "^={3,}$|^Index: .*$",
+      "name": "meta.diff.index"
+    }
+  ]
+}

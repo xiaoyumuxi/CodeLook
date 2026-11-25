@@ -1,0 +1,90 @@
+# CodeLook 配置文件：~/.config/codelook/config.yaml
+#
+# 所有设置都在这里，没有设置界面。保存后，下一次按空格预览就会生效，不用重启。
+# 只有一种情况要重新 `make install`：在 files / grammars 里加了新的扩展名或文件名。
+# 这些名字要写进扩展的 Info.plist，Quick Look 才会把这类文件交给 CodeLook。
+#
+# 写错的地方会显示在预览顶栏（⚠︎ config.yaml: …），其余设置照常生效。
+# CodeLook App 的“状态”页也会列出这些问题。
+# 下面的值都是默认值，删掉任何一项都会回到默认。
+
+font:
+  # 字体族，可以用逗号写多个，第一个可用的生效。
+  # JetBrains Mono 已经打包在 App 里，不需要安装。其它字体要先装在本机。
+  family: JetBrains Mono
+  size: 12            # 字号，单位 pt（6–72）
+  lineHeight: 1.5     # ≤ 4 表示字号的倍数，> 4 表示 pt
+  ligatures: false    # 连字：-> != => 是否合成一个字形
+
+view:
+  tabWidth: 4         # 一个 Tab 占几列（1–16）
+  lineNumbers: true
+
+theme:
+  # 配色方案，和 Lithe 编辑器一致：lithe、idea、vscode、github、one
+  scheme: lithe
+  italicComments: false
+
+  # 覆盖某类 token 的样式，浅色和深色都生效。
+  # 写法："#RRGGBB"，可以跟 bold、italic、underline、strikethrough，或者写 regular 去掉粗体和斜体。
+  # 键可以是角色：comment keyword string number type function variable property constant
+  #   boolean null tag attribute punctuation operator regex
+  # 也可以是 Lithe 的 token 名（按最长的点分前缀匹配，例如 comment.documentation）。
+  tokens:
+    # comment: "#8C8C8C italic"
+    # keyword: bold
+
+  # 浅色和深色外观各自的颜色。不写的项沿用默认值。
+  # tokens 写在 light / dark 下面时，只对这个外观生效。
+  light:
+    # background: "#FFFFFF"
+    # text: "#1F2328"      # 默认跟随配色方案
+    # lineNumber: "#6C707E"
+    # selection: "#D5E1FF"
+    tokens:
+      markup.inserted: "#067D17"
+      markup.deleted: "#C7222D"
+      markup.changed: "#0033B3"
+      markup.heading: "#0033B3 bold"
+  dark:
+    # background: "#191A1C"
+    # text: "#BCBEC4"
+    # lineNumber: "#868A91"
+    # selection: "#2E436E"
+    tokens:
+      markup.inserted: "#6AAB73"
+      markup.deleted: "#F75464"
+      markup.changed: "#56A8F5"
+      markup.heading: "#56A8F5 bold"
+
+# 指定文件名或扩展名用哪种语言，优先级高于内置的识别规则。
+# 语言可以写 Lithe 的语言 id（rust、python、yaml、jsonc、shellscript …），
+# 也可以写 CodeLook 自带的 id（见 Shared/LanguageTable.swift），写 plaintext 表示不高亮。
+files:
+  # "*.tpl": html
+  # ".envrc": shellscript
+  # Tiltfile: python
+
+# 为 Lithe 没有的语言加 TextMate 语法（.tmLanguage.json，或者 YAML 写的语法）。
+# grammar 是语法文件的路径，可以写成相对这个文件的路径，也可以用 ~/ 开头。
+# scopes 把语法里的 scope 映射成 token 名；冒号左边的 scope 会匹配它自己和它的子 scope。
+# 不写 scopes 时，按 Lithe 的默认规则映射（comment、string、keyword …）。
+# 语法文件改了也会自动重新读取。
+grammars:
+  - language: diff
+    name: Diff
+    grammar: grammars/diff.tmLanguage.json
+    extensions: [diff, patch, rej]
+    scopes:
+      markup.inserted: markup.inserted
+      markup.deleted: markup.deleted
+      markup.changed: markup.changed
+      meta.diff.range: markup.heading
+      meta.diff.header: keyword
+      meta.diff.index: comment
+      punctuation.definition.from-file: markup.deleted
+      punctuation.definition.to-file: markup.inserted
+
+limits:
+  maxFileSize: 8MB    # 只读取开头这么多（上限 256MB）
+  maxLines: 1000000

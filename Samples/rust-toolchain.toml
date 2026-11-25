@@ -1,0 +1,8 @@
+# The Rust release Rust Core is built, linted and tested with, locally and in CI.
+# rustup reads this file when cargo runs in this repository and installs the
+# release on first use. Upgrade it as described in CONTRIBUTING.md ("工具链" /
+# "Toolchain"): every `dtolnay/rust-toolchain@<version>` in .github/workflows
+# must name the same version. The Rust plugin SDK keeps its own minimum
+# (`rust-version = "1.87"`), which CI tests with `cargo +1.87`.
+[toolchain]
+channel = "1.100.0"

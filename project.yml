@@ -1,0 +1,92 @@
+name: CodeLook
+options:
+  bundleIdPrefix: dev.openres
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Ad-hoc signing: no developer account needed. Quick Look loads ad-hoc signed extensions
+    # from apps registered on this Mac.
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+    GENERATE_INFOPLIST_FILE: NO
+    DEAD_CODE_STRIPPING: YES
+    SWIFT_STRICT_CONCURRENCY: minimal
+    # Lithe's syntax engine (make syntax): a Go c-archive built for this Mac's architecture.
+    ARCHS: $(NATIVE_ARCH_ACTUAL)
+    SWIFT_OBJC_BRIDGING_HEADER: $(PROJECT_DIR)/build/lithesyntax/libLitheSyntax.h
+    LIBRARY_SEARCH_PATHS: $(PROJECT_DIR)/build/lithesyntax
+    OTHER_LDFLAGS: -lLitheSyntax -framework CoreFoundation -framework Security -lresolv
+targets:
+  CodeLook:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+      # JetBrains Mono, the default font (OFL), read from Contents/Resources/Fonts.
+      - path: Resources/Fonts
+        type: folder
+        buildPhase: resources
+      # config.example.yaml and its grammars; the app copies them to ~/.config/codelook on request.
+      - path: Examples
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: CodeLook
+        PRODUCT_BUNDLE_IDENTIFIER: dev.openres.CodeLook
+        INFOPLIST_FILE: App/Info.plist
+    dependencies:
+      - target: CodeLookPreview
+        embed: true
+        codeSign: true
+      - target: CodeLookFallback
+        embed: true
+        codeSign: true
+
+  CodeLookPreview:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Extension/PreviewViewController.swift
+      - Shared
+      # JetBrains Mono, the default font (OFL), read from Contents/Resources/Fonts.
+      - path: Resources/Fonts
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: CodeLookPreview
+        PRODUCT_BUNDLE_IDENTIFIER: dev.openres.CodeLook.Preview
+        INFOPLIST_FILE: Extension/Preview-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extension/Extension.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+
+  CodeLookFallback:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Extension/PreviewViewController.swift
+      - Shared
+      # JetBrains Mono, the default font (OFL), read from Contents/Resources/Fonts.
+      - path: Resources/Fonts
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: CodeLookFallback
+        PRODUCT_BUNDLE_IDENTIFIER: dev.openres.CodeLook.Fallback
+        INFOPLIST_FILE: Extension/Fallback-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extension/Extension.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES

@@ -1,0 +1,13 @@
+# Build products (make)
+/build/
+/CodeLook.xcodeproj/
+DerivedData/
+xcuserdata/
+
+# Written by `make` (Tools/gen): they include types other apps on this Mac declare and the
+# extensions in your config.yaml, so they differ from machine to machine.
+/App/Info.plist
+/Extension/Preview-Info.plist
+/Extension/Fallback-Info.plist
+
+.DS_Store
