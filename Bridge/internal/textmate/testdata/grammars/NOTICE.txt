@@ -1,0 +1,5 @@
+Grammars the tests run in addition to the bundled ones in internal/editor/syntax/grammars. They
+are test data only and are not part of the client.
+
+- injection.tmLanguage.json: written for the tests, so that sample.injection checks how
+  injections are collected, ordered and matched against vscode-textmate.

@@ -25,8 +25,8 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/1lck/Lithe-IDEA/desktop/internal/editor/rope"
-	"github.com/1lck/Lithe-IDEA/desktop/internal/editor/syntax"
+	"codelook/internal/rope"
+	"codelook/internal/syntax"
 )
 
 var registry = sync.OnceValue(syntax.NewRegistry)

@@ -1,5 +1,5 @@
 # CodeLook — Quick Look previews with syntax highlighting for code & config files.
-# Highlighting is Lithe's editor engine (Bridge/, a Go c-archive built from ../Lithe-IDEA).
+# Highlighting is Lithe's editor engine (Bridge/, a Go c-archive; the engine's code is in Bridge/internal).
 #
 #   make            Lithe syntax library + plists + Xcode project, build Release
 #   make install    build, copy to $(INSTALL_DIR), register, reset Quick Look
@@ -21,10 +21,9 @@ SHARED      := $(wildcard Shared/*.swift)
 CONFIG_FILE ?= $(HOME)/.config/codelook/config.yaml
 EXT_IDS     := dev.openres.CodeLook.Preview dev.openres.CodeLook.Fallback
 # Lithe's syntax engine for this Mac's architecture; the header doubles as the Swift bridging header.
-LITHE       ?= ../Lithe-IDEA
 SYNTAX_DIR  := $(BUILD)/lithesyntax
 SYNTAX_LIB  := $(SYNTAX_DIR)/libLitheSyntax.a
-SYNTAX_SRC  := $(wildcard Bridge/*.go) Bridge/go.mod Bridge/go.sum $(shell find $(LITHE)/desktop/internal/editor/syntax $(LITHE)/desktop/internal/editor/textmate $(LITHE)/desktop/internal/editor/rope -type f 2>/dev/null)
+SYNTAX_SRC  := $(shell find Bridge -type f ! -name '*_test.go' ! -path '*/testdata/*')
 SYNTAX_LD   := -L$(SYNTAX_DIR) -lLitheSyntax -framework CoreFoundation -framework Security -lresolv
 
 .PHONY: all syntax gen project build install uninstall check render test config clean
@@ -88,6 +87,7 @@ render: $(BUILD)/codelook-render
 	$(BUILD)/codelook-render "$(F)" --png /tmp/codelook-preview.png $(ARGS)
 
 test: $(BUILD)/codelook-render
+	cd Bridge && go test ./...
 	$(BUILD)/codelook-render --batch Samples/*
 
 config:

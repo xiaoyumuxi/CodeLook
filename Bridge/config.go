@@ -22,7 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/1lck/Lithe-IDEA/desktop/internal/editor/syntax"
+	"codelook/internal/syntax"
 	"gopkg.in/yaml.v3"
 )
 

@@ -164,7 +164,7 @@ extension NSColor {
 /// lines wider than the view. Rows are typeset (CTLine) when they first become visible, colored
 /// by Lithe's highlighter, which only tokenizes the lines asked for.
 public final class CodeTextView: NSView {
-    /// Lithe's editor colors (Lithe-IDEA desktop/internal/workbench/theme.go) unless the
+    /// Lithe's editor colors (its workbench theme) unless the
     /// settings give others; the text color is the syntax theme's.
     struct Palette {
         let dark: Bool

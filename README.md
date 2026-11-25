@@ -8,7 +8,7 @@
 
 ## 构建和安装
 
-需要的工具：Xcode、[XcodeGen](https://github.com/yonaskolb/XcodeGen)、Go（版本见 `Bridge/go.mod`），以及放在本仓库旁边的 Lithe 代码（`../Lithe-IDEA`，只读，不会修改它）。
+需要的工具：Xcode、[XcodeGen](https://github.com/yonaskolb/XcodeGen)、Go（版本见 `Bridge/go.mod`）。语法引擎的代码就在本仓库的 `Bridge/internal/` 里，不依赖其他仓库。
 
 ```sh
 GOPROXY=off make install   # 构建并安装到 ~/Applications/CodeLook.app，同时注册扩展、重置 Quick Look
@@ -21,7 +21,7 @@ make uninstall
 | `make config` | 从示例创建 `~/.config/codelook/config.yaml`（已存在就不动） |
 | `make check` | 列出这台 Mac 把各类文件识别成什么类型，以及 CodeLook 怎么覆盖它们 |
 | `make render F=文件` | 不安装就能预览：打印耗时，并输出 `/tmp/codelook-preview.png`（`ARGS=--dark` 生成深色版） |
-| `make test` | 对 `Samples/` 里的样例做一遍冒烟测试 |
+| `make test` | 引擎的 Go 测试，再对 `Samples/` 里的样例做一遍冒烟测试 |
 
 语法库只为本机架构编译，App 大约 28 MB，其中 Go 引擎和语法文件占大头。
 
@@ -95,7 +95,7 @@ limits:
 `theme.tokens` 的键有两种写法：
 
 - 角色：`comment keyword string number type function variable property constant boolean null tag attribute punctuation operator regex`。
-- Lithe 的 token 名，按最长的点分前缀匹配，例如写 `comment.documentation`，只改 `/** … */` 这类文档注释。不同语言的 token 名不一样，可以到 Lithe 的 `desktop/internal/editor/syntax/languages.go` 里查。
+- Lithe 的 token 名，按最长的点分前缀匹配，例如写 `comment.documentation`，只改 `/** … */` 这类文档注释。不同语言的 token 名不一样，可以到 `Bridge/internal/syntax/languages.go` 里查。
 
 值的写法是 `"#RRGGBB"`，后面可以跟 `bold`、`italic`、`underline`、`strikethrough`。写 `regular` 会去掉粗体和斜体。只写样式、不写颜色也可以，例如 `keyword: bold`。
 
@@ -120,6 +120,7 @@ Quick Look 扩展运行在沙盒里，只能读取 `~/.config/codelook/` 下面�
 ```
 Bridge/      Go：把 Lithe 的语法引擎编译成 C 静态库（libLitheSyntax.a + .h）
              bridge.go 负责分词和配色，config.go 负责读取 config.yaml、应用主题、加载语法
+             internal/ 是从 Lithe 复制过来的引擎（来源见 Bridge/internal/README.md）
 Shared/      Swift：读取文本（编码、二进制检测）、判断语言、按配置生成样式、CodeTextView 视图
 Extension/   两个 Quick Look 扩展：
              CodeLookPreview 认领具体的文件类型；
