@@ -21,11 +21,15 @@ LSREGISTER  := /System/Library/Frameworks/CoreServices.framework/Frameworks/Laun
 SHARED      := $(wildcard Shared/*.swift)
 CONFIG_FILE ?= $(HOME)/.config/codelook/config.yaml
 EXT_IDS     := dev.openres.CodeLook.Preview dev.openres.CodeLook.Fallback
-# Lithe's syntax engine for this Mac's architecture; the header doubles as the Swift bridging header.
+# Lithe's syntax engine for this Mac's architecture, a Go shared library: the app ships one copy
+# in Contents/Frameworks for itself and both extensions. Its header is the Swift bridging header.
 SYNTAX_DIR  := $(BUILD)/lithesyntax
-SYNTAX_LIB  := $(SYNTAX_DIR)/libLitheSyntax.a
+SYNTAX_LIB  := $(SYNTAX_DIR)/libLitheSyntax.dylib
 SYNTAX_SRC  := $(shell find Bridge -type f ! -name '*_test.go' ! -path '*/testdata/*')
-SYNTAX_LD   := -L$(SYNTAX_DIR) -lLitheSyntax -framework CoreFoundation -framework Security -lresolv
+SYNTAX_LD   := -L$(SYNTAX_DIR) -lLitheSyntax -Xlinker -rpath -Xlinker $(CURDIR)/$(SYNTAX_DIR)
+# Found through each binary's rpath: Contents/Frameworks in the app.
+GO_SHARED   := -trimpath -buildmode=c-shared \
+               -ldflags="-s -w -extldflags=-Wl,-install_name,@rpath/libLitheSyntax.dylib"
 
 # Release builds (make dist): a universal app; claims are fitted on the user's Mac by install.sh.
 VERSION     ?= $(patsubst v%,%,$(or $(shell git describe --tags --match 'v*' --abbrev=0 2>/dev/null),v0.0.0))
@@ -44,23 +48,23 @@ all: build
 $(SYNTAX_LIB): $(SYNTAX_SRC)
 	@mkdir -p $(SYNTAX_DIR)
 	cd Bridge && CGO_ENABLED=1 CGO_CFLAGS="-O2 -mmacosx-version-min=13.0" \
-	  go build -trimpath -ldflags="-s -w" -buildmode=c-archive -o ../$(SYNTAX_LIB) .
+	  CGO_LDFLAGS="-mmacosx-version-min=13.0" go build $(GO_SHARED) -o ../$(SYNTAX_LIB) .
 
 syntax: $(SYNTAX_LIB)
 
-# One archive per architecture (cgo cross-compiles with clang -arch), joined with lipo. The
+# One library per architecture (cgo cross-compiles with clang -arch), joined with lipo. The
 # headers cgo writes are the same for both 64-bit targets; the first one is the bridging header.
-$(BUILD)/lithesyntax-%/libLitheSyntax.a: $(SYNTAX_SRC)
+$(BUILD)/lithesyntax-%/libLitheSyntax.dylib: $(SYNTAX_SRC)
 	@mkdir -p $(@D)
 	cd Bridge && CGO_ENABLED=1 GOOS=darwin GOARCH=$(call goarch,$*) CC="clang -arch $*" \
 	  CGO_CFLAGS="-O2 -mmacosx-version-min=13.0" CGO_LDFLAGS="-mmacosx-version-min=13.0" \
-	  go build -trimpath -ldflags="-s -w" -buildmode=c-archive -o ../$@ .
+	  go build $(GO_SHARED) -o ../$@ .
 
-$(UNI_DIR)/libLitheSyntax.a: $(foreach a,$(DIST_ARCHS),$(BUILD)/lithesyntax-$(a)/libLitheSyntax.a)
+$(UNI_DIR)/libLitheSyntax.dylib: $(foreach a,$(DIST_ARCHS),$(BUILD)/lithesyntax-$(a)/libLitheSyntax.dylib)
 	@mkdir -p $(@D)
-	@for h in $(^:.a=.h); do cmp -s $$h $(firstword $(^:.a=.h)) || { echo "cgo headers differ: $$h"; exit 1; }; done
+	@for h in $(^:.dylib=.h); do cmp -s $$h $(firstword $(^:.dylib=.h)) || { echo "cgo headers differ: $$h"; exit 1; }; done
 	lipo -create $^ -output $@
-	cp $(firstword $(^:.a=.h)) $(UNI_DIR)/libLitheSyntax.h
+	cp $(firstword $(^:.dylib=.h)) $(UNI_DIR)/libLitheSyntax.h
 
 # The generator reads config.yaml too (extensions it maps), so it links the engine.
 $(BUILD)/codelook-gen: $(SHARED) Tools/gen/main.swift $(SYNTAX_LIB)
@@ -123,7 +127,7 @@ config:
 
 # --release: the plists claim neither this Mac's third-party types nor this user's config.yaml.
 # They are rewritten for the next `make build` again.
-dist: $(UNI_DIR)/libLitheSyntax.a $(BUILD)/codelook-gen
+dist: $(UNI_DIR)/libLitheSyntax.dylib $(BUILD)/codelook-gen
 	$(BUILD)/codelook-gen --release .
 	xcodegen generate --quiet
 	rm -rf $(DIST) $(DIST_DATA)
@@ -134,7 +138,8 @@ dist: $(UNI_DIR)/libLitheSyntax.a $(BUILD)/codelook-gen
 	  CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO build
 	@$(call unregister,$(DIST_APP))
 	codesign --verify --deep --strict "$(DIST_APP)"
-	@for f in MacOS/CodeLook PlugIns/CodeLookPreview.appex/Contents/MacOS/CodeLookPreview \
+	@for f in MacOS/CodeLook Frameworks/libLitheSyntax.dylib \
+	  PlugIns/CodeLookPreview.appex/Contents/MacOS/CodeLookPreview \
 	  PlugIns/CodeLookFallback.appex/Contents/MacOS/CodeLookFallback; do \
 	  archs=$$(lipo -archs "$(DIST_APP)/Contents/$$f"); echo "  $$f: $$archs"; \
 	  for a in $(DIST_ARCHS); do case " $$archs " in *" $$a "*) ;; *) echo "missing $$a"; exit 1;; esac; done; done

@@ -44,6 +44,8 @@ public enum QuickLookClaims {
 
     /// What extensions from config.yaml (`files`, `grammars`) need claimed.
     public struct UserClaims {
+        /// The extensions that need a claim: those the language table does not cover.
+        public var extensions: [String] = []
         /// Types to list: each extension's dynamic type and the type this Mac gives it.
         public var types: [String] = []
         /// Extensions no app declares, which get `userUTI`.
@@ -58,6 +60,7 @@ public enum QuickLookClaims {
         let known = Set(LanguageTable.all.filter(\.claim).flatMap(\.exts).map { $0.lowercased() })
         var c = UserClaims()
         for ext in Set(extensions.map { $0.lowercased() }).subtracting(known).sorted() {
+            c.extensions.append(ext)
             c.types.append(DynamicUTI.forFilenameExtension(ext))
             let id = UTType(filenameExtension: ext)?.identifier ?? ""
             // Ours (declared by an earlier install of this app) or nobody's: declare it.
@@ -70,6 +73,13 @@ public enum QuickLookClaims {
             }
         }
         return c
+    }
+
+    /// The extensions of `extensions` that need a claim and have none among `previewTypes` (the
+    /// Preview extension's QLSupportedContentTypes): added to config.yaml since the last claim.
+    /// Every claim lists the extension's dynamic type, whatever type this Mac gives it.
+    public static func unclaimed(extensions: [String], previewTypes: Set<String>) -> [String] {
+        userClaims(extensions: extensions).extensions.filter { !previewTypes.contains(DynamicUTI.forFilenameExtension($0)) }
     }
 
     public static func fallbackTypes() -> [String] { LanguageTable.fallbackContentTypes }

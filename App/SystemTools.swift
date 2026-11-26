@@ -1,10 +1,8 @@
 import AppKit
 import Foundation
 
-/// Thin wrappers around pluginkit / lsregister / qlmanage.
+/// Thin wrappers around pluginkit / qlmanage. Registering is install.sh's job (`AppModel.reclaim`).
 enum SystemTools {
-    static let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-
     @discardableResult
     static func run(_ path: String, _ args: [String]) -> (status: Int32, output: String) {
         let p = Process()
@@ -37,23 +35,6 @@ enum SystemTools {
             let path = rest.split(separator: "\t").last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
             return Registration(election: election, version: version, path: path)
         }
-    }
-
-    /// Re-register the app and its extensions, enable them and reset Quick Look's caches.
-    static func repair(app: URL, extensions: [(id: String, url: URL)]) -> String {
-        var log = ""
-        func step(_ path: String, _ args: [String]) {
-            let r = run(path, args)
-            log += "$ \((path as NSString).lastPathComponent) \(args.joined(separator: " "))\n"
-            if !r.output.isEmpty { log += r.output.hasSuffix("\n") ? r.output : r.output + "\n" }
-            if r.status != 0 { log += "→ exit \(r.status)\n" }
-        }
-        step(lsregister, ["-f", "-R", "-trusted", app.path])
-        for e in extensions { step("/usr/bin/pluginkit", ["-a", e.url.path]) }
-        for e in extensions { step("/usr/bin/pluginkit", ["-e", "use", "-i", e.id]) }
-        step("/usr/bin/qlmanage", ["-r"])
-        step("/usr/bin/qlmanage", ["-r", "cache"])
-        return log
     }
 
     static func openExtensionSettings() {

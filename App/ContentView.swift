@@ -59,11 +59,11 @@ struct StatusView: View {
 
             HStack {
                 Button("打开系统设置中的扩展") { SystemTools.openExtensionSettings() }
-                Button("重新注册并重置 Quick Look") { model.repair() }.disabled(model.busy)
+                Button("重新认领并注册（App 会重启）") { model.reclaim() }.disabled(model.busy)
                 Button("刷新") { model.refreshStatus() }
                 if model.busy { ProgressView().controlSize(.small) }
             }
-            Text("如果预览没变化：先点“重新注册并重置 Quick Look”，再在系统设置 › 通用 › 登录项与扩展 › Quick Look 中确认两个 CodeLook 扩展已勾选。")
+            Text("“重新认领并注册”和 install.sh --refresh 做的一样：按这台 Mac 的文件类型和 config.yaml 的扩展名重新认领，重新签名、注册并重置 Quick Look。预览没变化时先点它，再到系统设置 › 通用 › 登录项与扩展 › 快速查看 里确认两个 CodeLook 扩展已勾选。")
                 .font(.caption).foregroundStyle(.secondary)
 
             if !model.repairLog.isEmpty {
@@ -94,6 +94,8 @@ struct StatusView: View {
                     if let c = model.config {
                         if !c.problems.isEmpty {
                             Label("\(c.problems.count) 处问题", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                        } else if !c.unclaimed.isEmpty {
+                            Label("\(c.unclaimed.count) 个扩展名待认领", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                         } else if c.exists {
                             Label("已生效", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                         } else {
@@ -101,7 +103,7 @@ struct StatusView: View {
                         }
                     }
                 }
-                Text("字体、配色、语法、文件映射和大小上限都写在这个 YAML 文件里，保存后下一次预览即生效。只有新增扩展名时，要在终端运行下面这条命令重新认领（从源码安装的用 make install）：")
+                Text("字体、配色、语法、文件映射和大小上限都写在这个 YAML 文件里，保存后下一次预览即生效。只有新增扩展名时要重新认领：点下面的“重新认领并注册”，或在终端运行：")
                     .font(.callout).foregroundStyle(.secondary)
                 Text("\"\(Bundle.main.bundlePath)/Contents/Resources/install.sh\" --refresh")
                     .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
@@ -109,6 +111,11 @@ struct StatusView: View {
                     Text("\(c.path) · \(c.font)").font(.caption).foregroundStyle(.tertiary).textSelection(.enabled)
                     ForEach(c.problems, id: \.self) { p in
                         Text("⚠︎ \(p)").font(.caption).foregroundStyle(.orange).textSelection(.enabled)
+                    }
+                    if !c.unclaimed.isEmpty {
+                        Text("⚠︎ 这些扩展名还没认领：" + c.unclaimed.map { "." + $0 }.joined(separator: " ")
+                             + "（点下面的“重新认领并注册”）")
+                            .font(.caption).foregroundStyle(.orange).textSelection(.enabled)
                     }
                 }
                 HStack {

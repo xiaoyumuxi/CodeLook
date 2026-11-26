@@ -48,7 +48,7 @@ make uninstall
 | `make test` | 引擎的 Go 测试，再对 `Samples/` 里的样例做一遍冒烟测试 |
 | `make dist` | 发布包：通用二进制的 `build/dist/CodeLook.zip`，加上 `.sha256` 和 `install.sh`（用 `VERSION=1.2.3` 指定版本号） |
 
-- **体积**：`make` 只为本机架构编译，App 大约 28 MB。`make dist` 同时包含 arm64 和 x86_64，App 大约 54 MB，zip 约 16 MB。Go 引擎在 App 和两个扩展里各链接了一份，每种架构约 9 MB，体积主要来自这里。
+- **体积**：`make` 只为本机架构编译，App 大约 13 MB。`make dist` 同时包含 arm64 和 x86_64，App 大约 23 MB，zip 约 7 MB。体积主要是 Go 引擎（`Contents/Frameworks/libLitheSyntax.dylib`，每种架构约 7.5 MB），App 和两个扩展共用这一份。只要 Apple 芯片的包：`make dist DIST_ARCHS=arm64`。
 - **认领的类型**：源码构建会直接认领本机的类型和 config.yaml 里的扩展名。发布包不带构建机上的这些类型，留到用户安装时再认领。
 
 ### 发布
@@ -81,7 +81,8 @@ macOS 15 起，系统不再加载旧式的 Quick Look 插件（`.qlgenerator`）
 
 - **什么时候生效**：保存后的下一次预览，不用重启，也不用重装。引用的语法文件改了也一样，会自动重新读取。
 - **什么时候要重新认领**：在 `files` 或 `grammars` 里新加了扩展名。这些扩展名要写进扩展的 Info.plist，Quick Look 才会把这类文件交给 CodeLook。
-  - 运行 `~/Applications/CodeLook.app/Contents/Resources/install.sh --refresh`；从源码安装的，重新 `make install`。App 的“状态”页里有这条命令，可以直接复制。
+  - 运行 `~/Applications/CodeLook.app/Contents/Resources/install.sh --refresh`；从源码安装的，重新 `make install`。
+  - 也可以在 App 的“状态”页点“重新认领并注册”：App 会退出，运行 App 里的这个脚本，再带着输出重新打开。还没认领的扩展名会列在“配置文件”一栏里。
   - 原本系统不认识的扩展名，会被登记为 `dev.openres.codelook.user` 类型。
   - 新加的文件名不用重新认领：没有类型的文件本来就交给 CodeLook 的兜底扩展处理。
 - **写错了怎么办**：写错的那一项会被跳过，其余设置照常生效。问题会显示在预览顶栏（`⚠︎ config.yaml: …`，鼠标悬停可以看全部），App 的“状态”页也会列出来。
@@ -161,14 +162,15 @@ Quick Look 扩展运行在沙盒里，只能读取 `~/.config/codelook/` 下面�
 ## 架构
 
 ```
-Bridge/      Go：把 Lithe 的语法引擎编译成 C 静态库（libLitheSyntax.a + .h）
+Bridge/      Go：把 Lithe 的语法引擎编译成 C 动态库（libLitheSyntax.dylib + .h）
+             App 和两个扩展共用 Contents/Frameworks 里的这一份
              bridge.go 负责分词和配色，config.go 负责读取 config.yaml、应用主题、加载语法
              internal/ 是从 Lithe 复制过来的引擎（来源见 Bridge/internal/README.md）
 Shared/      Swift：读取文本（编码、二进制检测）、判断语言、按配置生成样式、CodeTextView 视图
 Extension/   两个 Quick Look 扩展：
              CodeLookPreview 认领具体的文件类型；
              CodeLookFallback 认领 public.data，接住系统叫不出类型的文本文件，二进制文件交还给系统
-App/         宿主 App：查看安装和配置状态、修复注册（不提供设置）
+App/         宿主 App：查看安装和配置状态，列出还没认领的扩展名，重新认领并注册（不提供设置）
              CodeLook --update-claims：给安装脚本用，把本机的类型和 config.yaml 的扩展名写进自己的 Info.plist
 Tools/gen    生成三个 Info.plist 里认领的类型（会读取 config.yaml 里的扩展名；--release 两者都不读）
              这些 plist 每次 make 都会重新生成，内容因机器而异，所以不入库

@@ -20,13 +20,14 @@ settings:
     GENERATE_INFOPLIST_FILE: NO
     DEAD_CODE_STRIPPING: YES
     SWIFT_STRICT_CONCURRENCY: minimal
-    # Lithe's syntax engine (make syntax): a Go c-archive built for this Mac's architecture.
-    # make dist overrides both with a universal (arm64 + x86_64) archive.
+    # Lithe's syntax engine (make syntax): a Go shared library built for this Mac's architecture.
+    # make dist overrides both with a universal (arm64 + x86_64) one. The app carries the only
+    # copy (Contents/Frameworks); the extensions load it from there.
     ARCHS: $(NATIVE_ARCH_ACTUAL)
     LITHESYNTAX_DIR: $(PROJECT_DIR)/build/lithesyntax
     SWIFT_OBJC_BRIDGING_HEADER: $(LITHESYNTAX_DIR)/libLitheSyntax.h
     LIBRARY_SEARCH_PATHS: $(LITHESYNTAX_DIR)
-    OTHER_LDFLAGS: -lLitheSyntax -framework CoreFoundation -framework Security -lresolv
+    OTHER_LDFLAGS: -lLitheSyntax
 targets:
   CodeLook:
     type: application
@@ -51,6 +52,20 @@ targets:
         PRODUCT_NAME: CodeLook
         PRODUCT_BUNDLE_IDENTIFIER: dev.openres.CodeLook
         INFOPLIST_FILE: App/Info.plist
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+    # Signed here, before Xcode signs the app around it.
+    postBuildScripts:
+      - name: Embed the syntax engine
+        script: |
+          set -e
+          dst="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+          mkdir -p "$dst"
+          cp -f "$LITHESYNTAX_DIR/libLitheSyntax.dylib" "$dst/libLitheSyntax.dylib"
+          codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" --timestamp=none "$dst/libLitheSyntax.dylib"
+        inputFiles:
+          - $(LITHESYNTAX_DIR)/libLitheSyntax.dylib
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libLitheSyntax.dylib
     dependencies:
       - target: CodeLookPreview
         embed: true
@@ -77,6 +92,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Extension/Extension.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
+        # The engine in the host app: CodeLook.app/Contents/Frameworks.
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../../../../Frameworks"
 
   CodeLookFallback:
     type: app-extension
@@ -96,3 +113,5 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Extension/Extension.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
+        # The engine in the host app: CodeLook.app/Contents/Frameworks.
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../../../../Frameworks"

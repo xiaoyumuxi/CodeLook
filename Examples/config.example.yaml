@@ -4,7 +4,7 @@
 # 只有一种情况要重新认领：在 files / grammars 里加了新的扩展名。这些扩展名要写进扩展的
 # Info.plist，Quick Look 才会把这类文件交给 CodeLook。运行
 #   ~/Applications/CodeLook.app/Contents/Resources/install.sh --refresh
-# 从源码安装的，重新 `make install`。
+# 或者在 CodeLook App 的“状态”页点“重新认领并注册”。从源码安装的，重新 `make install`。
 #
 # 写错的地方会显示在预览顶栏（⚠︎ config.yaml: …），其余设置照常生效。
 # CodeLook App 的“状态”页也会列出这些问题。
