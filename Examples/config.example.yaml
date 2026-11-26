@@ -1,8 +1,10 @@
 # CodeLook 配置文件：~/.config/codelook/config.yaml
 #
 # 所有设置都在这里，没有设置界面。保存后，下一次按空格预览就会生效，不用重启。
-# 只有一种情况要重新 `make install`：在 files / grammars 里加了新的扩展名或文件名。
-# 这些名字要写进扩展的 Info.plist，Quick Look 才会把这类文件交给 CodeLook。
+# 只有一种情况要重新认领：在 files / grammars 里加了新的扩展名。这些扩展名要写进扩展的
+# Info.plist，Quick Look 才会把这类文件交给 CodeLook。运行
+#   ~/Applications/CodeLook.app/Contents/Resources/install.sh --refresh
+# 从源码安装的，重新 `make install`。
 #
 # 写错的地方会显示在预览顶栏（⚠︎ config.yaml: …），其余设置照常生效。
 # CodeLook App 的“状态”页也会列出这些问题。

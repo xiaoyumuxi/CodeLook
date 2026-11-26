@@ -7,6 +7,7 @@
 #   make render F=path/to/file   timings + /tmp/codelook-preview.png snapshot (no install)
 #   make config     create ~/.config/codelook/config.yaml from the example (if there is none)
 #   make uninstall
+#   make dist       universal release build: build/dist/CodeLook.zip (+ .sha256, install.sh)
 #
 # All settings are in ~/.config/codelook/config.yaml (Examples/config.example.yaml). Edits apply
 # to the next preview; only new file extensions need `make install` (they go into the plists).
@@ -26,7 +27,17 @@ SYNTAX_LIB  := $(SYNTAX_DIR)/libLitheSyntax.a
 SYNTAX_SRC  := $(shell find Bridge -type f ! -name '*_test.go' ! -path '*/testdata/*')
 SYNTAX_LD   := -L$(SYNTAX_DIR) -lLitheSyntax -framework CoreFoundation -framework Security -lresolv
 
-.PHONY: all syntax gen project build install uninstall check render test config clean
+# Release builds (make dist): a universal app; claims are fitted on the user's Mac by install.sh.
+VERSION     ?= $(patsubst v%,%,$(or $(shell git describe --tags --match 'v*' --abbrev=0 2>/dev/null),v0.0.0))
+BUILD_NUM   ?= $(or $(shell git rev-list --count HEAD 2>/dev/null),1)
+DIST_ARCHS  ?= arm64 x86_64
+DIST        := $(BUILD)/dist
+DIST_DATA   := $(BUILD)/DistData
+DIST_APP    := $(DIST_DATA)/Build/Products/Release/CodeLook.app
+UNI_DIR     := $(BUILD)/lithesyntax-universal
+goarch       = $(patsubst x86_64,amd64,$(1))
+
+.PHONY: all syntax gen project build install uninstall check render test config clean dist
 
 all: build
 
@@ -36,6 +47,20 @@ $(SYNTAX_LIB): $(SYNTAX_SRC)
 	  go build -trimpath -ldflags="-s -w" -buildmode=c-archive -o ../$(SYNTAX_LIB) .
 
 syntax: $(SYNTAX_LIB)
+
+# One archive per architecture (cgo cross-compiles with clang -arch), joined with lipo. The
+# headers cgo writes are the same for both 64-bit targets; the first one is the bridging header.
+$(BUILD)/lithesyntax-%/libLitheSyntax.a: $(SYNTAX_SRC)
+	@mkdir -p $(@D)
+	cd Bridge && CGO_ENABLED=1 GOOS=darwin GOARCH=$(call goarch,$*) CC="clang -arch $*" \
+	  CGO_CFLAGS="-O2 -mmacosx-version-min=13.0" CGO_LDFLAGS="-mmacosx-version-min=13.0" \
+	  go build -trimpath -ldflags="-s -w" -buildmode=c-archive -o ../$@ .
+
+$(UNI_DIR)/libLitheSyntax.a: $(foreach a,$(DIST_ARCHS),$(BUILD)/lithesyntax-$(a)/libLitheSyntax.a)
+	@mkdir -p $(@D)
+	@for h in $(^:.a=.h); do cmp -s $$h $(firstword $(^:.a=.h)) || { echo "cgo headers differ: $$h"; exit 1; }; done
+	lipo -create $^ -output $@
+	cp $(firstword $(^:.a=.h)) $(UNI_DIR)/libLitheSyntax.h
 
 # The generator reads config.yaml too (extensions it maps), so it links the engine.
 $(BUILD)/codelook-gen: $(SHARED) Tools/gen/main.swift $(SYNTAX_LIB)
@@ -53,18 +78,20 @@ gen: $(BUILD)/codelook-gen
 project: gen
 	xcodegen generate --quiet
 
+# Xcode registers what it builds; only installed copies should provide the extensions, or the
+# build product competes with them for previews.
+unregister = $(LSREGISTER) -u "$(1)" >/dev/null 2>&1 || true; \
+	for e in CodeLookPreview CodeLookFallback; do pluginkit -r "$(1)/Contents/PlugIns/$$e.appex" >/dev/null 2>&1 || true; done
+
 build: $(SYNTAX_LIB) project
 	xcodebuild -project CodeLook.xcodeproj -scheme CodeLook -configuration $(CONFIG) \
 	  -derivedDataPath $(DERIVED) -destination 'generic/platform=macOS' -quiet build
+	@$(call unregister,$(APP))
 
 install: build
 	@mkdir -p "$(INSTALL_DIR)"
 	rm -rf "$(INSTALL_DIR)/CodeLook.app"
 	ditto "$(APP)" "$(INSTALL_DIR)/CodeLook.app"
-	@# Only the installed copy should be registered; the build product would compete with it.
-	-$(LSREGISTER) -u "$(APP)" 2>/dev/null
-	-pluginkit -r "$(APP)/Contents/PlugIns/CodeLookPreview.appex" 2>/dev/null
-	-pluginkit -r "$(APP)/Contents/PlugIns/CodeLookFallback.appex" 2>/dev/null
 	$(LSREGISTER) -f -R -trusted "$(INSTALL_DIR)/CodeLook.app"
 	pluginkit -a "$(INSTALL_DIR)/CodeLook.app/Contents/PlugIns/CodeLookPreview.appex"
 	pluginkit -a "$(INSTALL_DIR)/CodeLook.app/Contents/PlugIns/CodeLookFallback.appex"
@@ -93,6 +120,29 @@ test: $(BUILD)/codelook-render
 config:
 	@if [ -e "$(CONFIG_FILE)" ]; then echo "$(CONFIG_FILE) exists"; else \
 	  mkdir -p "$(dir $(CONFIG_FILE))" && cp Examples/config.example.yaml "$(CONFIG_FILE)" && echo "Created $(CONFIG_FILE)"; fi
+
+# --release: the plists claim neither this Mac's third-party types nor this user's config.yaml.
+# They are rewritten for the next `make build` again.
+dist: $(UNI_DIR)/libLitheSyntax.a $(BUILD)/codelook-gen
+	$(BUILD)/codelook-gen --release .
+	xcodegen generate --quiet
+	rm -rf $(DIST) $(DIST_DATA)
+	xcodebuild -project CodeLook.xcodeproj -scheme CodeLook -configuration Release \
+	  -derivedDataPath $(DIST_DATA) -destination 'generic/platform=macOS' -quiet \
+	  ARCHS="$(DIST_ARCHS)" ONLY_ACTIVE_ARCH=NO LITHESYNTAX_DIR="$(CURDIR)/$(UNI_DIR)" \
+	  MARKETING_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD_NUM) \
+	  CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO build
+	@$(call unregister,$(DIST_APP))
+	codesign --verify --deep --strict "$(DIST_APP)"
+	@for f in MacOS/CodeLook PlugIns/CodeLookPreview.appex/Contents/MacOS/CodeLookPreview \
+	  PlugIns/CodeLookFallback.appex/Contents/MacOS/CodeLookFallback; do \
+	  archs=$$(lipo -archs "$(DIST_APP)/Contents/$$f"); echo "  $$f: $$archs"; \
+	  for a in $(DIST_ARCHS); do case " $$archs " in *" $$a "*) ;; *) echo "missing $$a"; exit 1;; esac; done; done
+	@mkdir -p $(DIST)
+	ditto -c -k --keepParent "$(DIST_APP)" $(DIST)/CodeLook.zip
+	cd $(DIST) && shasum -a 256 CodeLook.zip > CodeLook.zip.sha256
+	cp scripts/install.sh $(DIST)/install.sh
+	@echo "CodeLook $(VERSION) ($(BUILD_NUM)): $$(du -h $(DIST)/CodeLook.zip | cut -f1) $(DIST)/CodeLook.zip"
 
 clean:
 	rm -rf $(BUILD) CodeLook.xcodeproj

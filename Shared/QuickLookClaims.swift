@@ -106,6 +106,96 @@ public enum QuickLookClaims {
     }
 }
 
+// MARK: - The whole claim set
+
+/// Everything the Info.plists claim, worked out for one machine. `Tools/gen` writes it into the
+/// source plists at build time; an installed app writes it into its own bundle
+/// (`CodeLook --update-claims`, run by install.sh), so a downloaded build covers the types the
+/// user's Mac uses and the extensions in the user's config.yaml.
+public struct ClaimSet {
+    public let previewTypes: [String]
+    public let imports: [[String: Any]]
+    /// What was found, one line each, for the tool's output.
+    public let report: [String]
+
+    /// - Parameters:
+    ///   - local: also claim the types this Mac's apps declare for our extensions (`TypeProbe`).
+    ///   - config: settings whose `files` / `grammars` extensions get claimed; nil = none
+    ///     (release builds must not pick up the builder's config).
+    public static func compute(local: Bool, config: CodeLookConfig?) -> ClaimSet {
+        var report: [String] = []
+        var localTypes: [String] = []
+        if local {
+            let probed = TypeProbe.run()
+            let base = Set(QuickLookClaims.previewTypes())
+            var skipped: [String: [String]] = [:]
+            // Our own imported type (an earlier install) comes from the config, not the probe.
+            for r in probed where !base.contains(r.type) && !r.type.hasPrefix(LanguageTable.utiPrefix + ".") {
+                if QuickLookClaims.isEligibleLocalType(r.type) {
+                    if !localTypes.contains(r.type) { localTypes.append(r.type) }
+                } else {
+                    skipped[r.type, default: []].append(r.sample)
+                }
+            }
+            report.append("local probe: \(probed.count) samples, \(localTypes.count) extra types claimed")
+            for t in localTypes.prefix(40) { report.append("  + \(t)") }
+            for (t, s) in skipped.sorted(by: { $0.key < $1.key }) where t != "public.data" {
+                report.append("  - \(t) (not claimed: non-text type owned by another app) ← \(s.prefix(4).joined(separator: " "))")
+            }
+        }
+
+        var user = QuickLookClaims.UserClaims()
+        if let config {
+            user = QuickLookClaims.userClaims(extensions: config.extensions)
+            report.append("config: \(config.path)" + (config.exists ? "" : " (none)"))
+            for p in config.problems { report.append("  problem: \(p)") }
+            if !config.extensions.isEmpty {
+                report.append("  extensions: " + config.extensions.sorted().map { "." + $0 }.joined(separator: " "))
+            }
+            for e in user.imported { report.append("  + .\(e) → \(QuickLookClaims.userUTI)") }
+            for s in user.skipped { report.append("  - .\(s.ext) (not claimed: \(s.type) has a preview of its own)") }
+        } else {
+            report.append("config: not read (release build)")
+        }
+
+        return ClaimSet(previewTypes: QuickLookClaims.previewTypes(local: localTypes, user: user),
+                        imports: QuickLookClaims.importedTypeDeclarations(user: user), report: report)
+    }
+
+    /// Writes the claims into a built app: the host app's `UTImportedTypeDeclarations` and the code
+    /// extension's `QLSupportedContentTypes`; every other key stays as the build wrote it.
+    /// Returns the plists that changed. The bundle's signature must be renewed afterwards.
+    public func apply(toApp app: URL) throws -> [URL] {
+        let appPlist = app.appendingPathComponent("Contents/Info.plist")
+        let previewPlist = app.appendingPathComponent("Contents/PlugIns/CodeLookPreview.appex/Contents/Info.plist")
+        var changed: [URL] = []
+        func update(_ url: URL, _ edit: (inout [String: Any]) throws -> Void) throws {
+            var format = PropertyListSerialization.PropertyListFormat.binary
+            guard let old = try PropertyListSerialization.propertyList(
+                from: try Data(contentsOf: url), format: &format) as? [String: Any] else {
+                throw CocoaError(.propertyListReadCorrupt, userInfo: [NSFilePathErrorKey: url.path])
+            }
+            var plist = old
+            try edit(&plist)
+            if NSDictionary(dictionary: plist).isEqual(to: old) { return }
+            try PropertyListSerialization.data(fromPropertyList: plist, format: format, options: 0)
+                .write(to: url, options: .atomic)
+            changed.append(url)
+        }
+        try update(appPlist) { $0["UTImportedTypeDeclarations"] = imports }
+        try update(previewPlist) { plist in
+            guard var ext = plist["NSExtension"] as? [String: Any],
+                  var attrs = ext["NSExtensionAttributes"] as? [String: Any] else {
+                throw CocoaError(.propertyListReadCorrupt, userInfo: [NSFilePathErrorKey: previewPlist.path])
+            }
+            attrs["QLSupportedContentTypes"] = previewTypes
+            ext["NSExtensionAttributes"] = attrs
+            plist["NSExtension"] = ext
+        }
+        return changed
+    }
+}
+
 // MARK: - Probing what this Mac does
 
 /// One sample file name (`x.rs`, `Makefile`, `.gitignore`) and the type LaunchServices gives it.

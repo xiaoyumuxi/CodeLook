@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 // codelook-gen — writes the Info.plists from Shared/LanguageTable.swift.
 //
 //   codelook-gen [--local] <project-root>     write App/Info.plist, Extension/*-Info.plist
+//   codelook-gen --release <project-root>     the same, for a build that is installed elsewhere
 //   codelook-gen --check   <project-root>     report how this Mac's types are covered
 //
 // --local also claims the UTIs this Mac assigns to our extensions / file names (types declared
@@ -11,12 +12,16 @@ import UniformTypeIdentifiers
 //
 // Extensions that ~/.config/codelook/config.yaml maps (files, grammars) are claimed too; file
 // names need nothing, the fallback extension already takes files without a type.
+//
+// --release does neither: a downloaded build gets both on the user's Mac instead, when
+// install.sh runs `CodeLook --update-claims` (ClaimSet in Shared/QuickLookClaims.swift).
 
 let args = Array(CommandLine.arguments.dropFirst())
-let local = args.contains("--local")
+let release = args.contains("--release")
+let local = args.contains("--local") && !release
 let check = args.contains("--check")
 guard let rootPath = args.last(where: { !$0.hasPrefix("--") }) else {
-    FileHandle.standardError.write(Data("usage: codelook-gen [--local|--check] <project-root>\n".utf8))
+    FileHandle.standardError.write(Data("usage: codelook-gen [--local|--release|--check] <project-root>\n".utf8))
     exit(2)
 }
 let root = URL(fileURLWithPath: rootPath)
@@ -92,37 +97,10 @@ if check {
 
 // MARK: - write
 
-var localTypes: [String] = []
-if local {
-    let probed = TypeProbe.run()
-    let base = Set(QuickLookClaims.previewTypes())
-    var skipped: [String: [String]] = [:]
-    for r in probed where !base.contains(r.type) {
-        if QuickLookClaims.isEligibleLocalType(r.type) {
-            if !localTypes.contains(r.type) { localTypes.append(r.type) }
-        } else {
-            skipped[r.type, default: []].append(r.sample)
-        }
-    }
-    print("local probe: \(probed.count) samples, \(localTypes.count) extra types claimed")
-    for t in localTypes.prefix(40) { print("  + \(t)") }
-    for (t, s) in skipped.sorted(by: { $0.key < $1.key }) where t != "public.data" {
-        print("  - \(t) (not claimed: non-text type owned by another app) ← \(s.prefix(4).joined(separator: " "))")
-    }
-}
-
-let config = CodeLookConfig.current()
-let user = QuickLookClaims.userClaims(extensions: config.extensions)
-print("config: \(config.path)" + (config.exists ? "" : " (none)"))
-for p in config.problems { print("  problem: \(p)") }
-if !config.extensions.isEmpty {
-    print("  extensions: " + config.extensions.sorted().map { "." + $0 }.joined(separator: " "))
-}
-for e in user.imported { print("  + .\(e) → \(QuickLookClaims.userUTI)") }
-for s in user.skipped { print("  - .\(s.ext) (not claimed: \(s.type) has a preview of its own)") }
-
-let previewTypes = QuickLookClaims.previewTypes(local: localTypes, user: user)
-let imports = QuickLookClaims.importedTypeDeclarations(user: user)
+let claims = ClaimSet.compute(local: local, config: release ? nil : CodeLookConfig.current())
+claims.report.forEach { print($0) }
+let previewTypes = claims.previewTypes
+let imports = claims.imports
 
 var app = bundleKeys(packageType: "$(PRODUCT_BUNDLE_PACKAGE_TYPE)", displayName: "CodeLook")
 app["LSApplicationCategoryType"] = "public.app-category.developer-tools"

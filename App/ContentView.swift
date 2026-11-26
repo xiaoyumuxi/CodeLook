@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-@main
+/// The window; started by `Main` unless the app was run as a command-line tool.
 struct CodeLookApp: App {
     @StateObject private var model = AppModel()
 
@@ -101,8 +101,10 @@ struct StatusView: View {
                         }
                     }
                 }
-                Text("字体、配色、语法、文件映射和大小上限都写在这个 YAML 文件里，保存后下一次预览即生效；新增扩展名需要重新 make install。")
+                Text("字体、配色、语法、文件映射和大小上限都写在这个 YAML 文件里，保存后下一次预览即生效。只有新增扩展名时，要在终端运行下面这条命令重新认领（从源码安装的用 make install）：")
                     .font(.callout).foregroundStyle(.secondary)
+                Text("\"\(Bundle.main.bundlePath)/Contents/Resources/install.sh\" --refresh")
+                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 if let c = model.config {
                     Text("\(c.path) · \(c.font)").font(.caption).foregroundStyle(.tertiary).textSelection(.enabled)
                     ForEach(c.problems, id: \.self) { p in

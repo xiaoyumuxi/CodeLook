@@ -21,9 +21,11 @@ settings:
     DEAD_CODE_STRIPPING: YES
     SWIFT_STRICT_CONCURRENCY: minimal
     # Lithe's syntax engine (make syntax): a Go c-archive built for this Mac's architecture.
+    # make dist overrides both with a universal (arm64 + x86_64) archive.
     ARCHS: $(NATIVE_ARCH_ACTUAL)
-    SWIFT_OBJC_BRIDGING_HEADER: $(PROJECT_DIR)/build/lithesyntax/libLitheSyntax.h
-    LIBRARY_SEARCH_PATHS: $(PROJECT_DIR)/build/lithesyntax
+    LITHESYNTAX_DIR: $(PROJECT_DIR)/build/lithesyntax
+    SWIFT_OBJC_BRIDGING_HEADER: $(LITHESYNTAX_DIR)/libLitheSyntax.h
+    LIBRARY_SEARCH_PATHS: $(LITHESYNTAX_DIR)
     OTHER_LDFLAGS: -lLitheSyntax -framework CoreFoundation -framework Security -lresolv
 targets:
   CodeLook:
@@ -39,6 +41,10 @@ targets:
       # config.example.yaml and its grammars; the app copies them to ~/.config/codelook on request.
       - path: Examples
         type: folder
+        buildPhase: resources
+      # The installer travels with the app: Contents/Resources/install.sh --refresh after
+      # adding extensions to config.yaml.
+      - path: scripts/install.sh
         buildPhase: resources
     settings:
       base:

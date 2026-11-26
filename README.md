@@ -6,7 +6,31 @@
 - 只排版、只上色屏幕上能看到的那几行。400 万字节的 Rust 文件、40 万行的 JSON，在 Quick Look 里打开大约 10–15 ms。
 - 所有设置都在一个 YAML 文件里，没有设置界面。字体、配色、文件名对应的语言、新语言的语法，都在这个文件里改。
 
-## 构建和安装
+## 安装
+
+```sh
+curl -fsSL https://github.com/xiaoyumuxi/CodeLook/releases/latest/download/install.sh | bash
+```
+
+脚本会下载最新的 `CodeLook.zip` 并校验 sha256，然后装到 `~/Applications/CodeLook.app`。接着它按这台 Mac 的文件类型和你的 config.yaml 认领文件，注册扩展，重置 Quick Look。
+
+需要 macOS 13 或更高版本。发布包是通用二进制，在 Apple 芯片和 Intel 上都原生运行，不经过 Rosetta。
+
+| 用法 | 作用 |
+| --- | --- |
+| `curl -fsSL …/install.sh \| bash -s -- --version v0.1.0` | 安装指定版本 |
+| `bash install.sh --zip ~/Downloads/CodeLook.zip` | 用从 Releases 页面下载的包安装 |
+| `… --dir /Applications` | 换一个安装目录（默认是已安装的位置，否则 `~/Applications`） |
+| `install.sh --refresh` | 在 config.yaml 里新加了扩展名之后，重新认领 |
+| `install.sh --uninstall` | 卸载，`~/.config/codelook` 会保留 |
+
+装好以后，脚本也在 App 里：`~/Applications/CodeLook.app/Contents/Resources/install.sh`。
+
+- **签名**：App 只有 ad-hoc 签名，没有经过 Apple 公证。用 curl 下载的文件不带隔离属性。从浏览器下载的 zip 带隔离属性，Gatekeeper 会拦下它，所以请用 `install.sh --zip` 安装，脚本会去掉隔离属性。
+- **安装时为什么要改 App**：发布包只认领通用的类型。这台 Mac 上其他 App 声明的类型（例如编辑器给 `.ltx` 声明的 `org.tug.ltx`），以及 config.yaml 里新加的扩展名，要在安装时写进 Info.plist（`CodeLook --update-claims`），写完再重新做一次 ad-hoc 签名。
+- **旧副本**：如果别处还注册着一份 CodeLook（旧的下载、源码构建的产物），它会和新装的抢着处理预览。脚本会取消它的注册，但不删除文件。
+
+## 从源码构建
 
 需要的工具：Xcode、[XcodeGen](https://github.com/yonaskolb/XcodeGen)、Go（版本见 `Bridge/go.mod`）。语法引擎的代码就在本仓库的 `Bridge/internal/` 里，不依赖其他仓库。
 
@@ -22,14 +46,30 @@ make uninstall
 | `make check` | 列出这台 Mac 把各类文件识别成什么类型，以及 CodeLook 怎么覆盖它们 |
 | `make render F=文件` | 不安装就能预览：打印耗时，并输出 `/tmp/codelook-preview.png`（`ARGS=--dark` 生成深色版） |
 | `make test` | 引擎的 Go 测试，再对 `Samples/` 里的样例做一遍冒烟测试 |
+| `make dist` | 发布包：通用二进制的 `build/dist/CodeLook.zip`，加上 `.sha256` 和 `install.sh`（用 `VERSION=1.2.3` 指定版本号） |
 
-语法库只为本机架构编译，App 大约 28 MB，其中 Go 引擎和语法文件占大头。
+- **体积**：`make` 只为本机架构编译，App 大约 28 MB。`make dist` 同时包含 arm64 和 x86_64，App 大约 54 MB，zip 约 16 MB。Go 引擎在 App 和两个扩展里各链接了一份，每种架构约 9 MB，体积主要来自这里。
+- **认领的类型**：源码构建会直接认领本机的类型和 config.yaml 里的扩展名。发布包不带构建机上的这些类型，留到用户安装时再认领。
+
+### 发布
+
+推送 `v*` 标签后，GitHub Actions（`.github/workflows/release.yml`）会依次：
+
+1. 跑测试；
+2. 编出通用包，并试装一遍；
+3. 创建 Release，附上 `CodeLook.zip`、`CodeLook.zip.sha256` 和 `install.sh`。
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+在 Actions 页面手动运行这个 workflow，只构建，不发布，包会保存在这次运行的 artifact 里。
 
 ### 为什么是一个 App
 
 macOS 15 起，系统不再加载旧式的 Quick Look 插件（`.qlgenerator`）。预览只能由 App Extension（`.appex`）提供，而扩展必须放在某个 App 的 `Contents/PlugIns/` 里，随 App 一起被系统登记。
 
-所以 CodeLook.app 只是装扩展的容器。平时不用打开它，只要它放在 `~/Applications` 或 `/Applications` 里并登记过，按空格就由扩展处理。`make install` 会完成登记。扩展可以在“系统设置 → 通用 → 登录项与扩展 → 快速查看”里开关。
+所以 CodeLook.app 只是装扩展的容器。平时不用打开它，只要它放在 `~/Applications` 或 `/Applications` 里并登记过，按空格就由扩展处理。安装脚本和 `make install` 都会完成登记。扩展可以在“系统设置 → 通用 → 登录项与扩展 → 快速查看”里开关。
 
 打开 App 能看到扩展是否启用、配置文件有没有问题，也能在里面一键修复注册。
 
@@ -40,7 +80,10 @@ macOS 15 起，系统不再加载旧式的 Quick Look 插件（`.qlgenerator`）
 创建方式有两种：运行 `make config`，或者在 CodeLook App 的“状态”页点“从示例创建并打开”。示例文件是 [`Examples/config.example.yaml`](Examples/config.example.yaml)，里面每一项都有说明，写的值就是默认值。
 
 - **什么时候生效**：保存后的下一次预览，不用重启，也不用重装。引用的语法文件改了也一样，会自动重新读取。
-- **什么时候要 `make install`**：在 `files` 或 `grammars` 里新加了扩展名或文件名。这些名字要写进扩展的 Info.plist，Quick Look 才会把这类文件交给 CodeLook。重装后，原本系统不认识的扩展名会被登记为 `dev.openres.codelook.user` 类型。
+- **什么时候要重新认领**：在 `files` 或 `grammars` 里新加了扩展名。这些扩展名要写进扩展的 Info.plist，Quick Look 才会把这类文件交给 CodeLook。
+  - 运行 `~/Applications/CodeLook.app/Contents/Resources/install.sh --refresh`；从源码安装的，重新 `make install`。App 的“状态”页里有这条命令，可以直接复制。
+  - 原本系统不认识的扩展名，会被登记为 `dev.openres.codelook.user` 类型。
+  - 新加的文件名不用重新认领：没有类型的文件本来就交给 CodeLook 的兜底扩展处理。
 - **写错了怎么办**：写错的那一项会被跳过，其余设置照常生效。问题会显示在预览顶栏（`⚠︎ config.yaml: …`，鼠标悬停可以看全部），App 的“状态”页也会列出来。
 
 ```yaml
@@ -126,8 +169,11 @@ Extension/   两个 Quick Look 扩展：
              CodeLookPreview 认领具体的文件类型；
              CodeLookFallback 认领 public.data，接住系统叫不出类型的文本文件，二进制文件交还给系统
 App/         宿主 App：查看安装和配置状态、修复注册（不提供设置）
-Tools/gen    生成三个 Info.plist 里认领的类型（会读取 config.yaml 里的扩展名）
+             CodeLook --update-claims：给安装脚本用，把本机的类型和 config.yaml 的扩展名写进自己的 Info.plist
+Tools/gen    生成三个 Info.plist 里认领的类型（会读取 config.yaml 里的扩展名；--release 两者都不读）
              这些 plist 每次 make 都会重新生成，内容因机器而异，所以不入库
+scripts/     install.sh：下载、校验、认领、重新签名、注册；也打包在 App 的 Resources 里
+.github/     release.yml：推送 v* 标签时构建通用包并发布 Release
 Tools/render 命令行渲染，用来测耗时和截图
 ```
 

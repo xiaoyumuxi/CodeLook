@@ -1,0 +1,83 @@
+name: Release
+
+# Builds the universal app (Apple silicon + Intel) and checks it installs.
+#   - push a tag v1.2.3: publishes a GitHub release with CodeLook.zip, its .sha256 and install.sh
+#   - Actions › Release › Run workflow: builds only; the zip is kept as a workflow artifact
+# Nothing runs on ordinary pushes: macOS minutes count 10× while the repository is private.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the build number counts commits; the version comes from the tag
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: Bridge/go.mod
+          cache-dependency-path: Bridge/go.sum
+
+      - name: Tools
+        run: |
+          brew install xcodegen
+          xcodebuild -version
+          go version
+
+      - name: Test
+        run: make test
+
+      - name: Build
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then make dist VERSION="${GITHUB_REF_NAME#v}"; else make dist; fi
+
+      - name: Install, refresh and uninstall
+        run: |
+          apps="$RUNNER_TEMP/Applications"
+          scripts/install.sh --zip build/dist/CodeLook.zip --dir "$apps"
+          "$apps/CodeLook.app/Contents/Resources/install.sh" --refresh --dir "$apps"
+          codesign --verify --deep --strict "$apps/CodeLook.app"
+          scripts/install.sh --uninstall --dir "$apps"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CodeLook
+          path: |
+            build/dist/CodeLook.zip
+            build/dist/CodeLook.zip.sha256
+            build/dist/install.sh
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          ## 安装
+
+          \`\`\`sh
+          curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh | bash
+          \`\`\`
+
+          装这个版本：\`curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/install.sh | bash -s -- --version ${GITHUB_REF_NAME}\`
+
+          或者下载 \`CodeLook.zip\` 和 \`install.sh\`，运行 \`bash install.sh --zip CodeLook.zip\`。
+
+          - 通用二进制：Apple 芯片和 Intel 上都是原生运行；需要 macOS 13 或更高版本。
+          - App 是 ad-hoc 签名，没有经过 Apple 公证。请用 install.sh 安装：它会去掉浏览器下载带上的隔离属性，按这台 Mac 的文件类型和 \`~/.config/codelook/config.yaml\` 认领文件，然后注册扩展。
+
+          EOF
+          gh release create "$GITHUB_REF_NAME" \
+            build/dist/CodeLook.zip build/dist/CodeLook.zip.sha256 build/dist/install.sh \
+            --title "CodeLook $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" --generate-notes --verify-tag
